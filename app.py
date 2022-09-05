@@ -1,6 +1,7 @@
+import base64
+import json
 import math
 import urllib3
-import base64
 from flask import Flask, make_response, redirect, render_template, request, Response
 from random import random
 from urllib.parse import urlencode
@@ -17,6 +18,7 @@ def generate_state(length):
     for i in range(length):
         text += chars[math.floor(random() * len(chars))]
     return text
+
 
 def encode_client_id_and_secret():
     string_to_encode = client_id + ':' + client_secret
@@ -39,7 +41,8 @@ def login():
              'scope':  scope,
              'redirect_uri': redirect_uri,
              'state': state}
-    resp = make_response(redirect('https://accounts.spotify.com/authorize?'+urlencode(query)))
+    resp = make_response(
+        redirect('https://accounts.spotify.com/authorize?'+urlencode(query)))
     resp.set_cookie('state', state)
     return resp
 
@@ -50,13 +53,23 @@ def callback():
     state = request.args.get('state')
     if state_cookie != state:
         return Response('', status=403)
-    resp = make_response(render_template('logged.html'))
-    resp.delete_cookie('state')
+    code = request.args.get('code')
     http = urllib3.PoolManager()
     r = http.request('POST', 'https://accounts.spotify.com/api/token',
-                 headers={
-                     'Authorization': 'Basic ' + encode_client_id_and_secret()
-                     })
+                     headers={
+                         'Authorization': 'Basic ' + encode_client_id_and_secret(),
+                         'Content-Type': 'application/x-www-form-urlencoded'
+                     },
+                     body=urlencode({
+                         'code': code,
+                         'redirect_uri': redirect_uri,
+                         'grant_type': 'authorization_code'
+                     }))
+    resp = make_response(render_template('logged.html'))
+    body = json.loads(r.data.decode('utf-8'))
+    resp.delete_cookie('state')
+    resp.set_cookie('access_token', body['access_token'])
+    resp.set_cookie('refresh_token', body['refresh_token'])
     return resp
 
 
