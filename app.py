@@ -27,6 +27,32 @@ def encode_client_id_and_secret():
     return b64.decode('ascii')
 
 
+def get_access_and_refresh_tokens(code):
+    http = urllib3.PoolManager()
+    response = http.request('POST', 'https://accounts.spotify.com/api/token',
+                            headers={
+                                'Authorization': 'Basic ' + encode_client_id_and_secret(),
+                                'Content-Type': 'application/x-www-form-urlencoded'
+                            },
+                            body=urlencode({
+                                'code': code,
+                                'redirect_uri': redirect_uri,
+                                'grant_type': 'authorization_code'
+                            }))
+    body = json.loads(response.data.decode('utf-8'))
+    return body['access_token'], body['refresh_token']
+
+
+def get_user_info(access_token, refresh_token):
+    http = urllib3.PoolManager()
+    response = http.request('GET', 'https://api.spotify.com/v1/me',
+                            headers={
+                                'Authorization': 'Bearer ' + access_token,
+                            })
+    if response.status == 200:
+        return json.loads(response.data.decode('utf-8'))
+
+
 @app.route("/")
 def home():
     return render_template('index.html')
@@ -53,24 +79,21 @@ def callback():
     state = request.args.get('state')
     if state_cookie != state:
         return Response('', status=403)
-    code = request.args.get('code')
-    http = urllib3.PoolManager()
-    r = http.request('POST', 'https://accounts.spotify.com/api/token',
-                     headers={
-                         'Authorization': 'Basic ' + encode_client_id_and_secret(),
-                         'Content-Type': 'application/x-www-form-urlencoded'
-                     },
-                     body=urlencode({
-                         'code': code,
-                         'redirect_uri': redirect_uri,
-                         'grant_type': 'authorization_code'
-                     }))
-    resp = make_response(render_template('logged.html'))
-    body = json.loads(r.data.decode('utf-8'))
+    access_token, refresh_token = get_access_and_refresh_tokens(
+        request.args.get('code'))
+    resp = make_response(redirect('/logged'))
     resp.delete_cookie('state')
-    resp.set_cookie('access_token', body['access_token'])
-    resp.set_cookie('refresh_token', body['refresh_token'])
+    resp.set_cookie('access_token', access_token)
+    resp.set_cookie('refresh_token', refresh_token)
     return resp
+
+
+@app.route("/logged")
+def logged():
+    access_token = request.cookies.get('access_token')
+    refresh_token = request.cookies.get('refresh_token')
+    info = get_user_info(access_token, refresh_token)
+    return render_template('logged.html', user_info=info)
 
 
 if __name__ == '__main__':

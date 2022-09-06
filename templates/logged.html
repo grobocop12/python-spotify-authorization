@@ -1,9 +1,22 @@
-
 <!DOCTYPE html>
 <html>
-    <head>
-    </head>
-    <body>
-        <div>Logged in</div>
-    </body>
+
+<head>
+</head>
+
+<body>
+    <div>Logged in</div>
+    <div>
+        <p>Country: {{user_info.country}}</p>
+    </div>
+    <div>
+        <p>Name: {{user_info.display_name}}</p>
+    </div>
+    {%for img in user_info.images%}
+    <div>
+        <img src="{{img.url}}"></img>
+    </div>
+    {%endfor%}
+</body>
+
 </html>
